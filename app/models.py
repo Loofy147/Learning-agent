@@ -1,9 +1,7 @@
 from sqlalchemy import create_engine, Column, Integer, String, Text
-from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import declarative_base
 from sqlalchemy.orm import sessionmaker
 from pydantic import BaseModel
-
-DATABASE_URL = "sqlite:///./test.db"
 
 Base = declarative_base()
 
@@ -25,5 +23,4 @@ class QuestionCreate(BaseModel):
 class QuestionResponse(QuestionCreate):
     id: int
 
-    class Config:
-        from_attributes = True
+    model_config = {"from_attributes": True}
