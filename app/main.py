@@ -1,5 +1,6 @@
 from fastapi import FastAPI, Depends, HTTPException
 from sqlalchemy.orm import Session
+import random
 from typing import List
 
 from . import models, database
@@ -26,6 +27,20 @@ def read_question(question_id: int, db: Session = Depends(database.get_db)):
 @app.get("/questions/", response_model=List[models.QuestionResponse])
 def read_questions(skip: int = 0, limit: int = 10, db: Session = Depends(database.get_db)):
     questions = db.query(models.Question).offset(skip).limit(limit).all()
+    return questions
+
+@app.get("/questions/random/", response_model=models.QuestionResponse)
+def read_random_question(db: Session = Depends(database.get_db)):
+    question_ids = db.query(models.Question.id).all()
+    if not question_ids:
+        raise HTTPException(status_code=404, detail="No questions found")
+    random_id = random.choice(question_ids)[0]
+    random_question = db.query(models.Question).filter(models.Question.id == random_id).first()
+    return random_question
+
+@app.get("/questions/search/", response_model=List[models.QuestionResponse])
+def search_questions(topic: str, skip: int = 0, limit: int = 10, db: Session = Depends(database.get_db)):
+    questions = db.query(models.Question).filter(models.Question.topic.ilike(f"%{topic}%")).offset(skip).limit(limit).all()
     return questions
 
 @app.put("/questions/{question_id}", response_model=models.QuestionResponse)
