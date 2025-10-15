@@ -106,3 +106,130 @@ def test_delete_question(db_session):
 
     response = client.delete("/questions/999")
     assert response.status_code == 404
+
+def test_create_user(db_session):
+    response = client.post(
+        "/users/",
+        json={"username": "testuser", "password": "testpassword"},
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["username"] == "testuser"
+    assert "id" in data
+
+def test_login_for_access_token(db_session):
+    # First, create a user to login with
+    client.post(
+        "/users/",
+        json={"username": "testuser", "password": "testpassword"},
+    )
+
+    response = client.post(
+        "/token",
+        data={"username": "testuser", "password": "testpassword"},
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert "access_token" in data
+    assert "token_type" in data
+
+def test_get_wallet(db_session):
+    # Create a user and get a token
+    client.post(
+        "/users/",
+        json={"username": "testuser", "password": "testpassword"},
+    )
+    response = client.post(
+        "/token",
+        data={"username": "testuser", "password": "testpassword"},
+    )
+    token = response.json()["access_token"]
+
+    headers = {"Authorization": f"Bearer {token}"}
+    response = client.get("/wallet/", headers=headers)
+    assert response.status_code == 200
+    data = response.json()
+    assert "user_id" in data
+    assert "btc_balance" in data
+    assert "usd_balance" in data
+
+def test_buy_btc(db_session):
+    # Create a user and get a token
+    client.post(
+        "/users/",
+        json={"username": "testuser", "password": "testpassword"},
+    )
+    response = client.post(
+        "/token",
+        data={"username": "testuser", "password": "testpassword"},
+    )
+    token = response.json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    # Get the wallet to check initial balance
+    response = client.get("/wallet/", headers=headers)
+    initial_usd_balance = response.json()["usd_balance"]
+    initial_btc_balance = response.json()["btc_balance"]
+
+    response = client.post(
+        "/buy/?btc_amount=1",
+        headers=headers,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["usd_balance"] < initial_usd_balance
+    assert data["btc_balance"] > initial_btc_balance
+
+def test_sell_btc(db_session):
+    # Create a user, get a token, and buy some BTC
+    client.post(
+        "/users/",
+        json={"username": "testuser", "password": "testpassword"},
+    )
+    response = client.post(
+        "/token",
+        data={"username": "testuser", "password": "testpassword"},
+    )
+    token = response.json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+    client.post(
+        "/buy/?btc_amount=1",
+        headers=headers,
+    )
+
+    # Get the wallet to check initial balance
+    response = client.get("/wallet/", headers=headers)
+    initial_usd_balance = response.json()["usd_balance"]
+    initial_btc_balance = response.json()["btc_balance"]
+
+    response = client.post(
+        "/sell/?btc_amount=0.5",
+        headers=headers,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["usd_balance"] > initial_usd_balance
+    assert data["btc_balance"] < initial_btc_balance
+
+def test_get_transactions(db_session):
+    # Create a user, get a token, and make a transaction
+    client.post(
+        "/users/",
+        json={"username": "testuser", "password": "testpassword"},
+    )
+    response = client.post(
+        "/token",
+        data={"username": "testuser", "password": "testpassword"},
+    )
+    token = response.json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+    client.post(
+        "/buy/?btc_amount=1",
+        headers=headers,
+    )
+
+    response = client.get("/transactions/", headers=headers)
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data) > 0
+    assert data[0]["transaction_type"] == "buy"
