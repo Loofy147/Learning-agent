@@ -106,3 +106,53 @@ def test_delete_question(db_session):
 
     response = client.delete("/questions/999")
     assert response.status_code == 404
+
+def test_read_random_question(db_session):
+    question = Question(question="Random Question", answer="Random Answer", topic="Random", difficulty="Easy")
+    db_session.add(question)
+    db_session.commit()
+
+    response = client.get("/questions/random/")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["question"] == "Random Question"
+
+def test_read_random_question_no_questions(db_session):
+    response = client.get("/questions/random/")
+    assert response.status_code == 404
+
+def test_search_questions(db_session):
+    question1 = Question(question="Q1", answer="A1", topic="Python", difficulty="Easy")
+    question2 = Question(question="Q2", answer="A2", topic="SQL", difficulty="Medium")
+    question3 = Question(question="Q3", answer="A3", topic="Python", difficulty="Hard")
+    db_session.add_all([question1, question2, question3])
+    db_session.commit()
+
+    response = client.get("/questions/search/?topic=Python")
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data) == 2
+    assert data[0]["topic"] == "Python"
+    assert data[1]["topic"] == "Python"
+
+    response = client.get("/questions/search/?topic=Python&skip=1&limit=1")
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data) == 1
+    assert data[0]["topic"] == "Python"
+
+    response = client.get("/questions/search/?topic=sql")
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data) == 1
+    assert data[0]["topic"] == "SQL"
+
+def test_search_questions_no_match(db_session):
+    question = Question(question="Q1", answer="A1", topic="Python", difficulty="Easy")
+    db_session.add(question)
+    db_session.commit()
+
+    response = client.get("/questions/search/?topic=Java")
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data) == 0
