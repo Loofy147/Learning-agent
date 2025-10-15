@@ -153,7 +153,13 @@ def test_get_wallet(db_session):
     assert "btc_balance" in data
     assert "usd_balance" in data
 
-def test_buy_btc(db_session):
+def test_buy_btc(db_session, monkeypatch):
+    # Mock the API call to return a fixed price
+    async def mock_get_btc_price_usd():
+        return 52000.0
+
+    monkeypatch.setattr("app.api_client.get_btc_price_usd", mock_get_btc_price_usd)
+
     # Create a user and get a token
     client.post(
         "/users/",
@@ -171,17 +177,29 @@ def test_buy_btc(db_session):
     initial_usd_balance = response.json()["usd_balance"]
     initial_btc_balance = response.json()["btc_balance"]
 
+    btc_to_buy = 1.0
+    mock_price = 52000.0
+    expected_usd_balance = initial_usd_balance - (btc_to_buy * mock_price)
+    expected_btc_balance = initial_btc_balance + btc_to_buy
+
     response = client.post(
-        "/buy/?btc_amount=1",
+        f"/buy/?btc_amount={btc_to_buy}",
         headers=headers,
     )
     assert response.status_code == 200
     data = response.json()
-    assert data["usd_balance"] < initial_usd_balance
-    assert data["btc_balance"] > initial_btc_balance
+    assert data["usd_balance"] == expected_usd_balance
+    assert data["btc_balance"] == expected_btc_balance
 
-def test_sell_btc(db_session):
-    # Create a user, get a token, and buy some BTC
+def test_sell_btc(db_session, monkeypatch):
+    # Mock the API call for both the initial buy and the sell
+    async def mock_get_btc_price_for_buy():
+        return 50000.0
+
+    async def mock_get_btc_price_for_sell():
+        return 53000.0
+
+    # Create a user and get a token
     client.post(
         "/users/",
         json={"username": "testuser", "password": "testpassword"},
@@ -192,26 +210,43 @@ def test_sell_btc(db_session):
     )
     token = response.json()["access_token"]
     headers = {"Authorization": f"Bearer {token}"}
+
+    # Use monkeypatch for the buy transaction
+    monkeypatch.setattr("app.api_client.get_btc_price_usd", mock_get_btc_price_for_buy)
     client.post(
         "/buy/?btc_amount=1",
         headers=headers,
     )
 
-    # Get the wallet to check initial balance
+    # Get the wallet to check balance after buying
     response = client.get("/wallet/", headers=headers)
-    initial_usd_balance = response.json()["usd_balance"]
-    initial_btc_balance = response.json()["btc_balance"]
+    balance_after_buy = response.json()
+    initial_usd_balance = balance_after_buy["usd_balance"]
+    initial_btc_balance = balance_after_buy["btc_balance"]
+
+    # Use monkeypatch for the sell transaction
+    monkeypatch.setattr("app.api_client.get_btc_price_usd", mock_get_btc_price_for_sell)
+
+    btc_to_sell = 0.5
+    mock_sell_price = 53000.0
+    expected_usd_balance = initial_usd_balance + (btc_to_sell * mock_sell_price)
+    expected_btc_balance = initial_btc_balance - btc_to_sell
 
     response = client.post(
-        "/sell/?btc_amount=0.5",
+        f"/sell/?btc_amount={btc_to_sell}",
         headers=headers,
     )
     assert response.status_code == 200
     data = response.json()
-    assert data["usd_balance"] > initial_usd_balance
-    assert data["btc_balance"] < initial_btc_balance
+    assert data["usd_balance"] == expected_usd_balance
+    assert data["btc_balance"] == expected_btc_balance
 
-def test_get_transactions(db_session):
+def test_get_transactions(db_session, monkeypatch):
+    # Mock the API call
+    async def mock_get_btc_price_usd():
+        return 50000.0
+    monkeypatch.setattr("app.api_client.get_btc_price_usd", mock_get_btc_price_usd)
+
     # Create a user, get a token, and make a transaction
     client.post(
         "/users/",
@@ -223,10 +258,11 @@ def test_get_transactions(db_session):
     )
     token = response.json()["access_token"]
     headers = {"Authorization": f"Bearer {token}"}
-    client.post(
+    buy_response = client.post(
         "/buy/?btc_amount=1",
         headers=headers,
     )
+    assert buy_response.status_code == 200
 
     response = client.get("/transactions/", headers=headers)
     assert response.status_code == 200
