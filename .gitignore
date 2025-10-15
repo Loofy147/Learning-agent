@@ -84,7 +84,11 @@ ipython_config.py
 # pyenv
 .python-version
 
+<<<<<< btc-trading-feature
 # PEP 582; manage dependencies in the project directory
+=======
+# PEP 582; used by poetry and pdm
+>>>>>> main
 __pypackages__/
 
 # Celery stuff
@@ -105,7 +109,11 @@ venv.bak/
 
 # Spyder project settings
 .spyderproject
+<<<<<< btc-trading-feature
 .spyderworkspace
+=======
+.spyproject
+>>>>> main
 
 # Rope project settings
 .ropeproject
@@ -129,6 +137,5 @@ cython_debug/
 
 # VSCode
 .vscode/
-
 # SQLite
 test.db
