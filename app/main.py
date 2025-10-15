@@ -1,14 +1,22 @@
+<<<<<< btc-trading-feature
+from fastapi import FastAPI
+=======
 from fastapi import FastAPI, Depends, HTTPException
 from sqlalchemy.orm import Session
 import random
 from typing import List
 
+>>>>>> main
 from . import models, database
-
-models.Base.metadata.create_all(bind=database.engine)
+from .routers import trading, questions
 
 app = FastAPI()
 
+<<<<<< btc-trading-feature
+@app.on_event("startup")
+def on_startup():
+    models.Base.metadata.create_all(bind=database.engine)
+=======
 @app.post("/questions/", response_model=models.QuestionResponse)
 def create_question(question: models.QuestionCreate, db: Session = Depends(database.get_db)):
     db_question = models.Question(**question.model_dump())
@@ -61,7 +69,7 @@ def delete_question(question_id: int, db: Session = Depends(database.get_db)):
     db_question = db.query(models.Question).filter(models.Question.id == question_id).first()
     if db_question is None:
         raise HTTPException(status_code=404, detail="Question not found")
+>>>>>> main
 
-    db.delete(db_question)
-    db.commit()
-    return
+app.include_router(trading.router)
+app.include_router(questions.router)

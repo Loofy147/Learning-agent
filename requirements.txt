@@ -5,3 +5,7 @@ pydantic
 pydantic-settings
 pytest
 httpx
+python-jose[cryptography]
+python-multipart
+passlib
+psycopg2-binary

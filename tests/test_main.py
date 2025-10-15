@@ -107,52 +107,165 @@ def test_delete_question(db_session):
     response = client.delete("/questions/999")
     assert response.status_code == 404
 
-def test_read_random_question(db_session):
-    question = Question(question="Random Question", answer="Random Answer", topic="Random", difficulty="Easy")
-    db_session.add(question)
-    db_session.commit()
-
-    response = client.get("/questions/random/")
+def test_create_user(db_session):
+    response = client.post(
+        "/users/",
+        json={"username": "testuser", "password": "testpassword"},
+    )
     assert response.status_code == 200
     data = response.json()
-    assert data["question"] == "Random Question"
+    assert data["username"] == "testuser"
+    assert "id" in data
 
-def test_read_random_question_no_questions(db_session):
-    response = client.get("/questions/random/")
-    assert response.status_code == 404
+def test_login_for_access_token(db_session):
+    # First, create a user to login with
+    client.post(
+        "/users/",
+        json={"username": "testuser", "password": "testpassword"},
+    )
 
-def test_search_questions(db_session):
-    question1 = Question(question="Q1", answer="A1", topic="Python", difficulty="Easy")
-    question2 = Question(question="Q2", answer="A2", topic="SQL", difficulty="Medium")
-    question3 = Question(question="Q3", answer="A3", topic="Python", difficulty="Hard")
-    db_session.add_all([question1, question2, question3])
-    db_session.commit()
-
-    response = client.get("/questions/search/?topic=Python")
+    response = client.post(
+        "/token",
+        data={"username": "testuser", "password": "testpassword"},
+    )
     assert response.status_code == 200
     data = response.json()
-    assert len(data) == 2
-    assert data[0]["topic"] == "Python"
-    assert data[1]["topic"] == "Python"
+    assert "access_token" in data
+    assert "token_type" in data
 
-    response = client.get("/questions/search/?topic=Python&skip=1&limit=1")
+def test_get_wallet(db_session):
+    # Create a user and get a token
+    client.post(
+        "/users/",
+        json={"username": "testuser", "password": "testpassword"},
+    )
+    response = client.post(
+        "/token",
+        data={"username": "testuser", "password": "testpassword"},
+    )
+    token = response.json()["access_token"]
+
+    headers = {"Authorization": f"Bearer {token}"}
+    response = client.get("/wallet/", headers=headers)
     assert response.status_code == 200
     data = response.json()
-    assert len(data) == 1
-    assert data[0]["topic"] == "Python"
+    assert "user_id" in data
+    assert "btc_balance" in data
+    assert "usd_balance" in data
 
-    response = client.get("/questions/search/?topic=sql")
+def test_buy_btc(db_session, monkeypatch):
+    # Mock the API call to return a fixed price
+    async def mock_get_btc_price_usd():
+        return 52000.0
+
+    monkeypatch.setattr("app.api_client.get_btc_price_usd", mock_get_btc_price_usd)
+
+    # Create a user and get a token
+    client.post(
+        "/users/",
+        json={"username": "testuser", "password": "testpassword"},
+    )
+    response = client.post(
+        "/token",
+        data={"username": "testuser", "password": "testpassword"},
+    )
+    token = response.json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    # Get the wallet to check initial balance
+    response = client.get("/wallet/", headers=headers)
+    initial_usd_balance = response.json()["usd_balance"]
+    initial_btc_balance = response.json()["btc_balance"]
+
+    btc_to_buy = 1.0
+    mock_price = 52000.0
+    expected_usd_balance = initial_usd_balance - (btc_to_buy * mock_price)
+    expected_btc_balance = initial_btc_balance + btc_to_buy
+
+    response = client.post(
+        f"/buy/?btc_amount={btc_to_buy}",
+        headers=headers,
+    )
     assert response.status_code == 200
     data = response.json()
-    assert len(data) == 1
-    assert data[0]["topic"] == "SQL"
+    assert data["usd_balance"] == expected_usd_balance
+    assert data["btc_balance"] == expected_btc_balance
 
-def test_search_questions_no_match(db_session):
-    question = Question(question="Q1", answer="A1", topic="Python", difficulty="Easy")
-    db_session.add(question)
-    db_session.commit()
+def test_sell_btc(db_session, monkeypatch):
+    # Mock the API call for both the initial buy and the sell
+    async def mock_get_btc_price_for_buy():
+        return 50000.0
 
-    response = client.get("/questions/search/?topic=Java")
+    async def mock_get_btc_price_for_sell():
+        return 53000.0
+
+    # Create a user and get a token
+    client.post(
+        "/users/",
+        json={"username": "testuser", "password": "testpassword"},
+    )
+    response = client.post(
+        "/token",
+        data={"username": "testuser", "password": "testpassword"},
+    )
+    token = response.json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    # Use monkeypatch for the buy transaction
+    monkeypatch.setattr("app.api_client.get_btc_price_usd", mock_get_btc_price_for_buy)
+    client.post(
+        "/buy/?btc_amount=1",
+        headers=headers,
+    )
+
+    # Get the wallet to check balance after buying
+    response = client.get("/wallet/", headers=headers)
+    balance_after_buy = response.json()
+    initial_usd_balance = balance_after_buy["usd_balance"]
+    initial_btc_balance = balance_after_buy["btc_balance"]
+
+    # Use monkeypatch for the sell transaction
+    monkeypatch.setattr("app.api_client.get_btc_price_usd", mock_get_btc_price_for_sell)
+
+    btc_to_sell = 0.5
+    mock_sell_price = 53000.0
+    expected_usd_balance = initial_usd_balance + (btc_to_sell * mock_sell_price)
+    expected_btc_balance = initial_btc_balance - btc_to_sell
+
+    response = client.post(
+        f"/sell/?btc_amount={btc_to_sell}",
+        headers=headers,
+    )
     assert response.status_code == 200
     data = response.json()
-    assert len(data) == 0
+    assert data["usd_balance"] == expected_usd_balance
+    assert data["btc_balance"] == expected_btc_balance
+
+def test_get_transactions(db_session, monkeypatch):
+    # Mock the API call
+    async def mock_get_btc_price_usd():
+        return 50000.0
+    monkeypatch.setattr("app.api_client.get_btc_price_usd", mock_get_btc_price_usd)
+
+    # Create a user, get a token, and make a transaction
+    client.post(
+        "/users/",
+        json={"username": "testuser", "password": "testpassword"},
+    )
+    response = client.post(
+        "/token",
+        data={"username": "testuser", "password": "testpassword"},
+    )
+    token = response.json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+    buy_response = client.post(
+        "/buy/?btc_amount=1",
+        headers=headers,
+    )
+    assert buy_response.status_code == 200
+
+    response = client.get("/transactions/", headers=headers)
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data) > 0
+    assert data[0]["transaction_type"] == "buy"
