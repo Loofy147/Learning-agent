@@ -1,4 +1,4 @@
-from sqlalchemy import create_engine, Column, Integer, String, Text, Float, DateTime, ForeignKey
+from sqlalchemy import create_engine, Column, Integer, String, Text, Float, DateTime, ForeignKey, Boolean
 from sqlalchemy.orm import declarative_base, relationship
 from sqlalchemy.orm import sessionmaker
 from pydantic import BaseModel
@@ -37,6 +37,17 @@ class Transaction(Base):
     timestamp = Column(DateTime, default=datetime.datetime.utcnow)
 
     wallet = relationship("Wallet", back_populates="transactions")
+
+class Order(Base):
+    __tablename__ = "orders"
+
+    id = Column(Integer, primary_key=True, index=True)
+    wallet_id = Column(Integer, ForeignKey("wallets.id"))
+    order_type = Column(String)  # "buy" or "sell"
+    btc_amount = Column(Float)
+    price_usd = Column(Float)
+    is_active = Column(Boolean, default=True)
+    timestamp = Column(DateTime, default=datetime.datetime.utcnow)
 
 class Question(Base):
     __tablename__ = "questions"

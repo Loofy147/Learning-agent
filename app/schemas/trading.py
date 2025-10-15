@@ -13,6 +13,23 @@ class User(UserBase):
     class Config:
         orm_mode = True
 
+class OrderBase(BaseModel):
+    order_type: str
+    btc_amount: float
+    price_usd: float
+
+class OrderCreate(OrderBase):
+    pass
+
+class Order(OrderBase):
+    id: int
+    wallet_id: int
+    is_active: bool
+    timestamp: datetime.datetime
+
+    class Config:
+        orm_mode = True
+
 class WalletBase(BaseModel):
     btc_balance: float
     usd_balance: float

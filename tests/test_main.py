@@ -269,3 +269,50 @@ def test_get_transactions(db_session, monkeypatch):
     data = response.json()
     assert len(data) > 0
     assert data[0]["transaction_type"] == "buy"
+
+def test_create_limit_order(db_session):
+    # Create a user and get a token
+    client.post(
+        "/users/",
+        json={"username": "testuser", "password": "testpassword"},
+    )
+    response = client.post(
+        "/token",
+        data={"username": "testuser", "password": "testpassword"},
+    )
+    token = response.json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    response = client.post(
+        "/orders/",
+        headers=headers,
+        json={"order_type": "buy", "btc_amount": 1, "price_usd": 50000},
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["order_type"] == "buy"
+    assert data["btc_amount"] == 1
+    assert data["price_usd"] == 50000
+    assert data["is_active"] == True
+
+def test_cancel_limit_order(db_session):
+    # Create a user, get a token, and create an order
+    client.post(
+        "/users/",
+        json={"username": "testuser", "password": "testpassword"},
+    )
+    response = client.post(
+        "/token",
+        data={"username": "testuser", "password": "testpassword"},
+    )
+    token = response.json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+    order_response = client.post(
+        "/orders/",
+        headers=headers,
+        json={"order_type": "buy", "btc_amount": 1, "price_usd": 50000},
+    )
+    order_id = order_response.json()["id"]
+
+    response = client.delete(f"/orders/{order_id}", headers=headers)
+    assert response.status_code == 204
