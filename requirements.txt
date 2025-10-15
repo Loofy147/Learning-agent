@@ -9,3 +9,6 @@ python-jose[cryptography]
 python-multipart
 passlib
 psycopg2-binary
+alembic
+celery
+redis

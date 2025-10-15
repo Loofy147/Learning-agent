@@ -22,5 +22,21 @@ services:
       - POSTGRES_PASSWORD=password
       - POSTGRES_DB=mydatabase
 
+  redis:
+    image: redis:6.2-alpine
+
+  worker:
+    build: .
+    command: celery -A app.worker.celery worker --loglevel=info
+    volumes:
+      - .:/app
+    environment:
+      - DATABASE_URL=postgresql://user:password@db:5432/mydatabase
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+    depends_on:
+      - db
+      - redis
+
 volumes:
   postgres_data:

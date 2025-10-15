@@ -104,3 +104,39 @@ def get_transactions(current_user: models.User = Depends(auth.get_current_user),
         raise HTTPException(status_code=404, detail="Wallet not found")
     transactions = db.query(models.Transaction).filter(models.Transaction.wallet_id == db_wallet.id).all()
     return transactions
+
+@router.post("/orders/", response_model=schemas.Order)
+def create_order(order: schemas.OrderCreate, current_user: models.User = Depends(auth.get_current_user), db: Session = Depends(database.get_db)):
+    db_wallet = db.query(models.Wallet).filter(models.Wallet.user_id == current_user.id).first()
+    if db_wallet is None:
+        raise HTTPException(status_code=404, detail="Wallet not found")
+
+    if order.order_type == "buy":
+        usd_needed = order.btc_amount * order.price_usd
+        if db_wallet.usd_balance < usd_needed:
+            raise HTTPException(status_code=400, detail="Insufficient USD balance")
+    elif order.order_type == "sell":
+        if db_wallet.btc_balance < order.btc_amount:
+            raise HTTPException(status_code=400, detail="Insufficient BTC balance")
+    else:
+        raise HTTPException(status_code=400, detail="Invalid order type")
+
+    db_order = models.Order(**order.model_dump(), wallet_id=db_wallet.id)
+    db.add(db_order)
+    db.commit()
+    db.refresh(db_order)
+    return db_order
+
+@router.delete("/orders/{order_id}", status_code=204)
+def cancel_order(order_id: int, current_user: models.User = Depends(auth.get_current_user), db: Session = Depends(database.get_db)):
+    db_order = db.query(models.Order).filter(models.Order.id == order_id).first()
+    if db_order is None:
+        raise HTTPException(status_code=404, detail="Order not found")
+
+    db_wallet = db.query(models.Wallet).filter(models.Wallet.id == db_order.wallet_id).first()
+    if db_wallet.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized to cancel this order")
+
+    db_order.is_active = False
+    db.commit()
+    return
